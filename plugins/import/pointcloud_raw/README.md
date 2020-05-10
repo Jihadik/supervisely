@@ -2,7 +2,7 @@
 
 Just drag and drop the collection of ppintcloud files and folders with them. The new project will be created. 
 
-Download [`pointcloud_without_ann_import_example.tar`](https://drive.google.com/file/d/1edi9hI6yG1MuIIPjw4aHrOIURX9WAbvj/view) example, unpack archive and drag-and-drop its content.  
+Download [`pointcloud_import_example.tar`](https://drive.google.com/file/d/1CgtHEtuq8dZI0Sg3Jp3a5DeR0-xBfgd6/view?usp=sharing) example, unpack archive and drag-and-drop its content.  
    
 
 ## Datasets structure
@@ -45,7 +45,7 @@ In this case only the one dataset `abcd_folder` will be created with all pointcl
 
 ### Example 3. PCD files with photo context:
 
-Download [`pointcloud_with_photo_context.tar`](https://drive.google.com/file/d/1lZqzj6IE8rDYS2jnAAp6UaklpnSbNJWE/view?usp=sharing) example, unpack archive and drag-and-drop its content. 
+Download [`pointcloud_with_photo_context.tar`](https://drive.google.com/file/d/1eeK8zXavO7uJgDBNBtN40RyPEHOCg4mq/view?usp=sharing) example, unpack archive and drag-and-drop its content. 
 
 ```
 abcd_folder/

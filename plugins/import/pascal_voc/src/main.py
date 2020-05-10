@@ -60,11 +60,11 @@ class ImporterPascalVOCSegm:
         self.colors_file = os.path.join(sly.TaskPaths.DATA_DIR, 'colors.txt')
         self.with_instances = os.path.isdir(self.inst_dir)
         sly.logger.info('Will import data {} instance info.'.format('with' if self.with_instances else 'without'))
-
+        self.obj_classes = sly.ObjClassCollection()
         self._read_datasets()
         self._read_colors()
 
-        self.obj_classes = sly.ObjClassCollection()
+
 
     def _read_datasets(self):
         self.src_datasets = {}
@@ -90,6 +90,9 @@ class ImporterPascalVOCSegm:
             sly.logger.info('Will use default PascalVOC color mapping.')
             self.cls2col = default_classes_colors
 
+        obj_classes_list = [sly.ObjClass(name=class_name, geometry_type=sly.Bitmap, color=color) for class_name, color in self.cls2col.items()]
+        self.obj_classes = self.obj_classes.add_items(obj_classes_list)
+
         sly.logger.info('Determined {} class(es).'.format(len(self.cls2col)),
                         extra={'classes': list(self.cls2col.keys())})
         self.color2class_name = {v: k for k, v in self.cls2col.items()}
@@ -108,21 +111,21 @@ class ImporterPascalVOCSegm:
             curr_col2cls = {k: v for k, v in curr_col2cls if v is not None}  # _instance_ color -> class name
         else:
             colored_img = segmentation_img
-            curr_col2cls = self.color2class_name
+            curr_col2cls = {}
+            segmentation_img = segmentation_img.astype(np.uint16)
+            colors = list(get_col2coord(segmentation_img).keys())
+            for curr_col in colors:
+                curr_col2cls[curr_col] = self.color2class_name[curr_col]
 
         ann = sly.Annotation.from_img_path(img_path)
 
         for color, class_name in curr_col2cls.items():
             mask = np.all(colored_img == color, axis=2)  # exact match (3-channel img & rgb color)
-
             bitmap = sly.Bitmap(data=mask)
-            obj_class = sly.ObjClass(name=class_name, geometry_type=sly.Bitmap, color=color)
-
-            if not self.obj_classes.has_key(class_name):
-                self.obj_classes = self.obj_classes.add(obj_class)
+            obj_class = sly.ObjClass(name=class_name, geometry_type=sly.Bitmap)
 
             ann = ann.add_label(sly.Label(bitmap, obj_class))
-            #  clear used pixels in mask to check missing colors, see below
+                #  clear used pixels in mask to check missing colors, see below
             colored_img[mask] = (0, 0, 0)
 
         if np.sum(colored_img) > 0:

@@ -1,5 +1,5 @@
 # Import Pointclouds with annotations in Supervisely format 
-This plugin allows you to upload Pointcloud Projects in Supervisely format which includes pointclouds, annotations and `meta.json`. You can download example [here](https://drive.google.com/file/d/149uOnC5RFizzekyrk1LjUvUrhNpt7tjq/view?usp=sharing).
+This plugin allows you to upload Pointcloud Projects in Supervisely format which includes pointclouds, annotations and `meta.json`. You can download example [here](https://drive.google.com/file/d/1BtZyffWtWNR-mk_PHNPMnGgSlAkkQpBl/view?usp=sharing).
 
 # Example:
 

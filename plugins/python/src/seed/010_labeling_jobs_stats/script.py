@@ -39,7 +39,7 @@ widgets = [api.report.create_table(df_jobs_summary, "Jobs summary", "How many jo
            api.report.create_table(df_tags_summary, "Tags summary", "How many images have tag / how many objects have tag"),
            api.report.create_table(df_jobs, "Labeling Jobs", "Extended statistics for every job in the team")]
 
-report_id = api.report.create(team.id, widgets)
+report_id = api.report.create(team.id, "Labeling jobs stats for team {!r}".format(team.name), widgets)
 #print("http://192.168.1.42/reports/{}".format(report_id))
 
 sly.logger.info('REPORT_CREATED', extra={'event_type': sly.EventType.REPORT_CREATED, 'report_id': report_id})
