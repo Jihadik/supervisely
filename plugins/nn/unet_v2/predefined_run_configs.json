@@ -48,7 +48,8 @@
         "model_tags": {
           "save_names": "__all__",
           "add_suffix": "_unet"
-        }
+        },
+        "save_probabilities": false
       }
     }
   },
@@ -76,7 +77,8 @@
         "model_tags": {
           "save_names": "__all__",
           "add_suffix": "_unet"
-        }
+        },
+        "save_probabilities": false
       }
     }
   },
@@ -105,7 +107,8 @@
         "model_tags": {
           "save_names": "__all__",
           "add_suffix": "_unet"
-        }
+        },
+        "save_probabilities": false
       }
     }
   },
@@ -135,7 +138,8 @@
         "model_tags": {
           "save_names": "__all__",
           "add_suffix": "_unet"
-        }
+        },
+        "save_probabilities": false
       }
     }
   }

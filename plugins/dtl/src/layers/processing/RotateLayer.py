@@ -6,7 +6,7 @@ import numpy as np
 from legacy_supervisely_lib import logger
 from legacy_supervisely_lib.figure.image_rotator import ImageRotator
 from legacy_supervisely_lib.figure.rectangle import Rect
-from legacy_supervisely_lib.figure.aux import expand_image_with_rect, crop_image_with_rect
+from legacy_supervisely_lib.figure.helper import expand_image_with_rect, crop_image_with_rect
 
 from Layer import Layer
 

@@ -18,7 +18,7 @@ def create_project(api, workspace_id, project_name, append_to_existing_project):
     return dst_project
 
 
-def process_dataset_links(api, project_info, file_path):
+def process_dataset_links(api, project_info, file_path, normalize_url=True):
     dataset_name = os.path.relpath(os.path.splitext(file_path)[0], TaskPaths.DATA_DIR).replace(os.sep, '__')
     links_counter = 0
 
@@ -34,7 +34,13 @@ def process_dataset_links(api, project_info, file_path):
                     basename = os.path.basename(url)
                     sly.image.validate_ext(basename)
                     file_name, file_ext = os.path.splitext(basename)
-                    image_name = slugify(file_name) + file_ext
+                    #if file_ext == '':
+                    #    file_ext = sly.image.DEFAULT_IMG_EXT
+                    if normalize_url is True:
+                        image_name = slugify(file_name, lowercase=False, save_order=True) + file_ext
+                    else:
+                        image_name = file_name + file_ext
+                    image_name = api.image.get_free_name(dst_dataset.id, image_name)
                     api.image.upload_link(dst_dataset.id, image_name, url)
                     links_counter += 1
 
@@ -52,6 +58,11 @@ def process_dataset_links(api, project_info, file_path):
 def main():
     task_config = load_json_file(TaskPaths.TASK_CONFIG_PATH)
 
+    convert_options = task_config['options']
+    normalize_url = True
+    if convert_options is not None:
+        normalize_url = convert_options.get('normalize_image_name', True)
+
     server_address = task_config['server_address']
     token = task_config['api_token']
     append_to_existing_project = task_config['append_to_existing_project']
@@ -65,7 +76,7 @@ def main():
     total_counter = 0
     for file_path in sly.fs.list_files_recursively(
             TaskPaths.DATA_DIR, filter_fn=lambda path: sly.fs.get_file_ext(path).lower() == '.txt'):
-        total_counter += process_dataset_links(api, project_info, file_path)
+        total_counter += process_dataset_links(api, project_info, file_path, normalize_url=normalize_url)
 
     if total_counter == 0:
         raise RuntimeError('Result project is empty! No valid links find in files.')

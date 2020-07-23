@@ -3,7 +3,7 @@
 from copy import deepcopy
 
 from legacy_supervisely_lib.figure.sliding_windows import SlidingWindows
-from legacy_supervisely_lib.figure.aux import crop_image_with_rect
+from legacy_supervisely_lib.figure.helper import crop_image_with_rect
 
 from Layer import Layer
 

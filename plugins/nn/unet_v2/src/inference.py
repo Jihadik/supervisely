@@ -54,9 +54,25 @@ class UnetV2SingleImageApplier(SingleImageInferenceBase):
                                                 model_dir=TaskPaths.MODEL_DIR)
         logger.info('Weights are loaded.')
 
+
+    """ how to use probabilities (example)
+        # let's consider pixel at position (5, 7). Number of classes == 3
+        
+        pixel_row = 5
+        pixel_col = 7
+        classes_count = 3
+        probas = []
+        for class_index in range(classes_count):
+            probas.append(pixelwise_scores_labels[class_index].geometry._data[pixel_row, pixel_col])
+
+        sum(probas)
+        >>> array([1.], dtype=float32)
+    """
+
     def inference(self, img, ann):
         resized_img = cv2.resize(img, self.input_size[::-1])
         model_input = input_image_normalizer(resized_img)
+        # sum(pixelwise_probas_array[0, 0, :]) == 1
         pixelwise_probas_array = pytorch_inference.infer_per_pixel_scores_single_image(
             self.model, model_input, img.shape[:2])
         labels = raw_to_labels.segmentation_array_to_sly_bitmaps(

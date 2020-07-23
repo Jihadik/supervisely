@@ -1,18 +1,22 @@
 # coding: utf-8
+from collections import defaultdict
 
 from supervisely_lib.api.module_api import ApiField, RemoveableBulkModuleApi
-
-from supervisely_lib.io.fs import ensure_base_path
+from supervisely_lib.io.fs import ensure_base_path, get_file_hash
 from supervisely_lib._utils import batched
 
 from supervisely_lib.api.pointcloud.pointcloud_annotation_api import PointcloudAnnotationAPI
 from supervisely_lib.api.pointcloud.pointcloud_object_api import PointcloudObjectApi
 from supervisely_lib.api.pointcloud.pointcloud_figure_api import PointcloudFigureApi
 from supervisely_lib.api.pointcloud.pointcloud_tag_api import PointcloudTagApi
+from requests_toolbelt import MultipartDecoder, MultipartEncoder
 
 
 class PointcloudApi(RemoveableBulkModuleApi):
     def __init__(self, api):
+        '''
+        :param api: Api class object
+        '''
         super().__init__(api)
         self.annotation = PointcloudAnnotationAPI(api)
         self.object = PointcloudObjectApi(api)
@@ -47,16 +51,35 @@ class PointcloudApi(RemoveableBulkModuleApi):
         return super(PointcloudApi, self)._convert_json_info(info, skip_missing=skip_missing)
 
     def get_list(self, dataset_id, filters=None):
+        '''
+        :param dataset_id: int
+        :param filters: list
+        :return: list of the pointclouds objects from the dataset with given id
+        '''
         return self.get_list_all_pages('point-clouds.list',  {ApiField.DATASET_ID: dataset_id, ApiField.FILTER: filters or []})
 
     def get_info_by_id(self, id):
+        '''
+        :param id: int
+        :return: PointcloudApi metadata by numeric id
+        '''
         return self._get_info_by_id(id, 'point-clouds.info')
 
     def _download(self, id, is_stream=False):
+        '''
+        :param id: int
+        :param is_stream: bool
+        :return: Response object containing pointcloud object with given id
+        '''
         response = self._api.post('point-clouds.download', {ApiField.ID: id}, stream=is_stream)
         return response
 
     def download_path(self, id, path):
+        '''
+        Download pointcloud with given id on the given path
+        :param id: int
+        :param path: str
+        '''
         response = self._download(id, is_stream=True)
         ensure_base_path(path)
         with open(path, 'wb') as fd:
@@ -119,3 +142,57 @@ class PointcloudApi(RemoveableBulkModuleApi):
     def add_related_images(self, images_json):
         response = self._api.post('point-clouds.images.add', {ApiField.IMAGES: images_json})
         return response.json()
+
+    def upload_path(self, dataset_id, name, path, meta=None):
+        metas = None if meta is None else [meta]
+        return self.upload_paths(dataset_id, [name], [path], metas=metas)[0]
+
+    def upload_paths(self, dataset_id, names, paths, progress_cb=None, metas=None):
+        def path_to_bytes_stream(path):
+            return open(path, 'rb')
+        hashes = self._upload_data_bulk(path_to_bytes_stream, get_file_hash, paths, progress_cb)
+        return self.upload_hashes(dataset_id, names, hashes, metas=metas)
+
+    def check_existing_hashes(self, hashes):
+        results = []
+        if len(hashes) == 0:
+            return results
+        for hashes_batch in batched(hashes, batch_size=900):
+            response = self._api.post('images.internal.hashes.list', hashes_batch)
+            results.extend(response.json())
+        return results
+
+    def _upload_data_bulk(self, func_item_to_byte_stream, func_item_hash, items, progress_cb):
+        hashes = []
+        if len(items) == 0:
+            return hashes
+
+        hash_to_items = defaultdict(list)
+
+        for idx, item in enumerate(items):
+            item_hash = func_item_hash(item)
+            hashes.append(item_hash)
+            hash_to_items[item_hash].append(item)
+
+        unique_hashes = set(hashes)
+        remote_hashes = self.check_existing_hashes(list(unique_hashes))
+        new_hashes = unique_hashes - set(remote_hashes)
+
+        if progress_cb is not None:
+            progress_cb(len(remote_hashes))
+
+        # upload only new images to supervisely server
+        items_to_upload = []
+        for hash in new_hashes:
+            items_to_upload.extend(hash_to_items[hash])
+
+        for batch in batched(items_to_upload):
+            content_dict = {}
+            for idx, item in enumerate(batch):
+                content_dict["{}-file".format(idx)] = (str(idx), func_item_to_byte_stream(item), 'pcd/*')
+            encoder = MultipartEncoder(fields=content_dict)
+            self._api.post('point-clouds.bulk.upload', encoder)
+            if progress_cb is not None:
+                progress_cb(len(batch))
+
+        return hashes

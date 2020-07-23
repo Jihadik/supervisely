@@ -3,7 +3,7 @@
 from copy import deepcopy
 
 from legacy_supervisely_lib.figure.rectangle import Rect
-from legacy_supervisely_lib.figure.aux import crop_image_with_rect
+from legacy_supervisely_lib.figure.helper import crop_image_with_rect
 from legacy_supervisely_lib.utils.config_readers import rect_from_bounds
 
 from Layer import Layer

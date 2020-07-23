@@ -469,7 +469,7 @@ if __name__ == '__main__':
     "add_suffix": "_custom"   # Append _custom suffix to the output class names.
   }
 }
-```
+ ```
 
 ### Training mode helpers
 

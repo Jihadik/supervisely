@@ -42,10 +42,12 @@ class DeeplabSingleImageApplier(SingleImageInferenceBase):
         super()._construct_and_fill_model()
         self.device_ids = sly.env.remap_gpu_devices([self._config[GPU_DEVICE]])
 
-        self.session, self.inputs, self.logits = construct_model(sly.TaskPaths.MODEL_DIR,
-                                                                 self.input_size,
-                                                                 self.train_config[SETTINGS],
-                                                                 self.out_class_mapping)
+        self.session, self.inputs, self.probabilities = construct_model(
+            sly.TaskPaths.MODEL_DIR,
+            self.input_size,
+            self.train_config[SETTINGS],
+            self.out_class_mapping
+        )
         sly.logger.info('Weights are loaded.')
 
     def inference(self, img, ann):
@@ -53,7 +55,7 @@ class DeeplabSingleImageApplier(SingleImageInferenceBase):
         # Resize to requested model input size
         input_image = sly.image.resize(img, self.input_size)
         input_image_var = np.expand_dims(input_image.astype(np.float32), 0)
-        raw_pixelwise_probas_array = self.session.run(self.logits, feed_dict={self.inputs: input_image_var})
+        raw_pixelwise_probas_array = self.session.run(self.probabilities, feed_dict={self.inputs: input_image_var})
         # Resize back to the original
         pixelwise_probas_array = cv2.resize(np.squeeze(raw_pixelwise_probas_array[0]), (w, h), cv2.INTER_LINEAR)
 

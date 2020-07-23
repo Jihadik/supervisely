@@ -8,7 +8,7 @@ from legacy_supervisely_lib.figure.fig_classes import FigClasses
 from legacy_supervisely_lib.figure.rectangle import Rect
 from legacy_supervisely_lib.figure.figure_rectangle import FigureRectangle
 from legacy_supervisely_lib.figure.sliding_windows import SlidingWindows
-from legacy_supervisely_lib.figure.aux import crop_image_with_rect
+from legacy_supervisely_lib.figure.helper import crop_image_with_rect
 from legacy_supervisely_lib.utils.config_readers import rect_from_bounds
 from legacy_supervisely_lib.utils.nn_data import prediction_to_sly_bitmaps
 

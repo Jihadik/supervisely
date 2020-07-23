@@ -1,0 +1,10 @@
+[
+    {
+        "title": "settings",
+        "type": "import",
+        "config": {
+            "normalize_image_name": true,
+            "normalize_image_name (help)": "if true, string slugification will be perform. A \"slug\" is a way of generating a valid URL. Learn more here: https://stackoverflow.com/questions/5574042/string-slugification-in-python"
+    }
+  }
+]

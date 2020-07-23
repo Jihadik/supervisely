@@ -31,8 +31,9 @@ def construct_model(model_dir, input_size, train_config, out_class_mapping):
             logits,
             input_size,
             align_corners=True)
+        probabilities = tf.nn.softmax(logits)
 
         saver = tf.train.Saver(slim.get_variables_to_restore())
         session = tf.train.MonitoredTrainingSession(master='')
         saver.restore(session, model_dir + '/model_weights/model.ckpt')
-    return session, inputs, logits
+    return session, inputs, probabilities

@@ -7,7 +7,7 @@ DATA = 'data'
 EXTERIOR = 'exterior'
 FACES = 'faces'
 INTERIOR = 'interior'
-MULTICHANNEL_BITMAP = 'multichannel_bitmap'
+MULTICHANNEL_BITMAP = 'multichannelBitmap'
 ORIGIN = 'origin'
 POINTS = 'points'
 ROWS = 'rows'
@@ -30,3 +30,12 @@ Z = "z"
 POSITION = "position"
 ROTATION = "rotation"
 DIMENTIONS = "dimensions"
+
+
+LABELER_LOGIN = 'labelerLogin'
+UPDATED_AT = 'updatedAt'
+CREATED_AT = 'createdAt'
+ID = 'id'
+CLASS_ID = 'classId'
+
+INDICES = 'indices'

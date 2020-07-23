@@ -2,7 +2,7 @@
 
 import json
 
-from .aux import not_implemeted_method
+from .helper import not_implemeted_method
 
 
 # abstract base class for figures

@@ -1,15 +1,17 @@
 # coding: utf-8
 
 import io
-from collections import defaultdict
+import re
 import urllib.parse
+import json
+
+from requests_toolbelt import MultipartDecoder, MultipartEncoder
 
 from supervisely_lib.api.module_api import ApiField, RemoveableBulkModuleApi
 from supervisely_lib.imaging import image as sly_image
-from supervisely_lib.io.fs import ensure_base_path, get_file_hash, get_file_ext
+from supervisely_lib.io.fs import ensure_base_path, get_file_hash, get_file_ext, get_file_name
+from supervisely_lib.sly_logger import logger
 from supervisely_lib._utils import batched, generate_free_name
-from requests_toolbelt import MultipartDecoder, MultipartEncoder
-import re
 
 
 class ImageApi(RemoveableBulkModuleApi):
@@ -35,13 +37,26 @@ class ImageApi(RemoveableBulkModuleApi):
         return 'ImageInfo'
 
     def get_list(self, dataset_id, filters=None):
+        '''
+        :param dataset_id: int
+        :param filters: list
+        :return: list all the images for a given dataset
+        '''
         return self.get_list_all_pages('images.list',  {ApiField.DATASET_ID: dataset_id, ApiField.FILTER: filters or []})
 
     def get_info_by_id(self, id):
+        '''
+        :param id: int
+        :return: image metadata by numeric id
+        '''
         return self._get_info_by_id(id, 'images.info')
 
     # @TODO: reimplement to new method images.bulk.info
     def get_info_by_id_batch(self, ids):
+        '''
+        :param ids: list of integers
+        :return: list of images metadata
+        '''
         results = []
         if len(ids) == 0:
             return results
@@ -55,15 +70,30 @@ class ImageApi(RemoveableBulkModuleApi):
         return ordered_results
 
     def _download(self, id, is_stream=False):
+        '''
+        :param id: int
+        :param is_stream: bool
+        :return: Response class object contain metadata of image with given id
+        '''
         response = self._api.post('images.download', {ApiField.ID: id}, stream=is_stream)
         return response
 
     def download_np(self, id):
+        '''
+        Download image with given id in numpy format
+        :param id: int
+        :return: image in RGB format(numpy matrix)
+        '''
         response = self._download(id)
         img = sly_image.read_bytes(response.content)
         return img
 
     def download_path(self, id, path):
+        '''
+        Download image with given id and saves it for a given path
+        :param id: int
+        :param path: str
+        '''
         response = self._download(id, is_stream=True)
         ensure_base_path(path)
         with open(path, 'wb') as fd:
@@ -71,6 +101,11 @@ class ImageApi(RemoveableBulkModuleApi):
                 fd.write(chunk)
 
     def _download_batch(self, dataset_id, ids):
+        '''
+        Generate image id and it content from given dataset and list of images ids
+        :param dataset_id: int
+        :param ids: list of integers
+        '''
         for batch_ids in batched(ids):
             response = self._api.post(
                 'images.bulk.download', {ApiField.DATASET_ID: dataset_id, ApiField.IMAGE_IDS: batch_ids})
@@ -83,6 +118,13 @@ class ImageApi(RemoveableBulkModuleApi):
                 yield img_id, part
 
     def download_paths(self, dataset_id, ids, paths, progress_cb=None):
+        '''
+        Download images with given ids and saves it for a given paths
+        :param dataset_id: int
+        :param ids: list of integers
+        :param paths: list of str (if ids list != lengh of paths list raise error)
+        :param progress_cb:
+        '''
         if len(ids) == 0:
             return
         if len(ids) != len(paths):
@@ -100,6 +142,13 @@ class ImageApi(RemoveableBulkModuleApi):
         #    raise RuntimeError("images.bulk.download: imageIds order is broken")
 
     def download_bytes(self, dataset_id, ids, progress_cb=None):
+        '''
+        Doenload images with given ids from dataset with given id in binary format(bytes)
+        :param dataset_id: int
+        :param ids: list of integers
+        :param progress_cb:
+        :return: list of images in binary format
+        '''
         if len(ids) == 0:
             return []
 
@@ -112,10 +161,21 @@ class ImageApi(RemoveableBulkModuleApi):
         return [id_to_img[id] for id in ids]
 
     def download_nps(self, dataset_id, ids, progress_cb=None):
+        '''
+        Doenload images with given ids from dataset with given id in numpy format
+        :param dataset_id: int
+        :param ids: list of integers
+        :param progress_cb:
+        :return: list of images in RGB format(numpy matrix)
+        '''
         return [sly_image.read_bytes(img_bytes)
                 for img_bytes in self.download_bytes(dataset_id=dataset_id, ids=ids, progress_cb=progress_cb)]
 
     def check_existing_hashes(self, hashes):
+        '''
+        :param hashes: list of str
+        :return: list of jsons objects(None if image with given hash not exist)
+        '''
         results = []
         if len(hashes) == 0:
             return results
@@ -125,6 +185,10 @@ class ImageApi(RemoveableBulkModuleApi):
         return results
 
     def check_image_uploaded(self, hash):
+        '''
+        :param hash: str
+        :return: True if image with given hash exist, False in over way
+        '''
         response = self._api.post('images.internal.hashes.list', [hash])
         results = response.json()
         if len(results) == 0:
@@ -132,56 +196,124 @@ class ImageApi(RemoveableBulkModuleApi):
         else:
             return True
 
-    def _upload_data_bulk(self, func_item_to_byte_stream, func_item_hash, items, progress_cb):
-        hashes = []
-        if len(items) == 0:
-            return hashes
+    def _upload_uniq_images_single_req(self, func_item_to_byte_stream, hashes_items_to_upload):
+        """
+        Upload images (binary data) to server with single request.
+        Expects unique images that aren't exist at server.
+        :param func_item_to_byte_stream: converter for "item" to byte stream
+        :param hashes_items_to_upload: list of pairs (hash, item)
+        :return: list of hashes for successfully uploaded items
+        """
+        content_dict = {}
+        for idx, (_, item) in enumerate(hashes_items_to_upload):
+            content_dict["{}-file".format(idx)] = (str(idx), func_item_to_byte_stream(item), 'image/*')
+        encoder = MultipartEncoder(fields=content_dict)
+        resp = self._api.post('images.bulk.upload', encoder)
 
-        hash_to_items = defaultdict(list)
+        resp_list = json.loads(resp.text)
+        remote_hashes = [d['hash'] for d in resp_list if 'hash' in d]
+        if len(remote_hashes) != len(hashes_items_to_upload):
+            problem_items = [(hsh, item, resp['errors'])
+                             for (hsh, item), resp in zip(hashes_items_to_upload, resp_list) if resp.get('errors')]
+            logger.warn('Not all images were uploaded within request.', extra={
+                'total_cnt': len(hashes_items_to_upload), 'ok_cnt': len(remote_hashes), 'items': problem_items})
+        return remote_hashes
 
-        for idx, item in enumerate(items):
-            item_hash = func_item_hash(item)
-            hashes.append(item_hash)
-            hash_to_items[item_hash].append(item)
+    def _upload_data_bulk(self, func_item_to_byte_stream, items_hashes, retry_cnt=3, progress_cb=None):
+        """
+        Upload images (binary data) to server. Works with already existing or duplicating images.
+        :param func_item_to_byte_stream: converter for "item" to byte stream
+        :param items_hashes: iterable of pairs (item, hash) where "item" is a some descriptor (e.g. image file path)
+         for image data, and "hash" is a hash for the image binary data
+        :param retry_cnt: int, number of retries to send the whole set of items
+        :param progress_cb: callback to account progress (in number of items)
+        """
+        hash_to_items = {i_hash: item for item, i_hash in items_hashes}
 
-        unique_hashes = set(hashes)
-        remote_hashes = self.check_existing_hashes(list(unique_hashes))
-        new_hashes = unique_hashes - set(remote_hashes)
-
-        if progress_cb is not None:
+        unique_hashes = set(hash_to_items.keys())
+        remote_hashes = set(self.check_existing_hashes(list(unique_hashes)))  # existing -- from server
+        if progress_cb:
             progress_cb(len(remote_hashes))
+        pending_hashes = unique_hashes - remote_hashes
 
-        # upload only new images to supervisely server
-        items_to_upload = []
-        for hash in new_hashes:
-            items_to_upload.extend(hash_to_items[hash])
+        # @TODO: some correlation with sly.io.network_exceptions. Should we perform retries here?
+        for retry_idx in range(retry_cnt):
+            # single attempt to upload all data which is not uploaded yet
 
-        for batch in batched(items_to_upload):
-            content_dict = {}
-            for idx, item in enumerate(batch):
-                content_dict["{}-file".format(idx)] = (str(idx), func_item_to_byte_stream(item), 'image/*')
-            encoder = MultipartEncoder(fields=content_dict)
-            self._api.post('images.bulk.upload', encoder)
-            if progress_cb is not None:
-                progress_cb(len(batch))
+            for hashes in batched(list(pending_hashes)):
+                pending_hashes_items = [(h, hash_to_items[h]) for h in hashes]
+                hashes_rcv = self._upload_uniq_images_single_req(func_item_to_byte_stream, pending_hashes_items)
+                pending_hashes -= set(hashes_rcv)
+                if set(hashes_rcv) - set(hashes):
+                    logger.warn('Hash inconsistency in images bulk upload.',
+                                extra={'sent': hashes, 'received': hashes_rcv})
+                if progress_cb:
+                    progress_cb(len(hashes_rcv))
 
-        return hashes
+            if not pending_hashes:
+                return
+
+            logger.warn('Unable to upload images (data).', extra={
+                'retry_idx': retry_idx,
+                'items': [(h, hash_to_items[h]) for h in pending_hashes]
+            })
+            # now retry it for the case if it is a shadow server/connection error
+
+        raise RuntimeError("Unable to upload images (data). "
+                           "Please check if images are in supported format and if ones aren't corrupted.")
 
     def upload_path(self, dataset_id, name, path, meta=None):
+        '''
+        Upload image with given name from given path to dataset
+        :param dataset_id: int
+        :param name: str
+        :param path: str
+        :param meta:
+        :return: list of images
+        '''
         metas = None if meta is None else [meta]
         return self.upload_paths(dataset_id, [name], [path], metas=metas)[0]
 
     def upload_paths(self, dataset_id, names, paths, progress_cb=None, metas=None):
+        '''
+        Upload images with given names from given pathes to dataset
+        :param dataset_id: int
+        :param names: list of str (if lengh of names list != lengh of paths list raise error)
+        :param paths: list of str
+        :param progress_cb:
+        :param metas: list of dicts
+        :return: list of images
+        '''
         def path_to_bytes_stream(path):
             return open(path, 'rb')
-        hashes = self._upload_data_bulk(path_to_bytes_stream, get_file_hash, paths, progress_cb)
+
+        hashes = [get_file_hash(x) for x in paths]
+
+        self._upload_data_bulk(path_to_bytes_stream, zip(paths, hashes), progress_cb=progress_cb)
         return self.upload_hashes(dataset_id, names, hashes, metas=metas)
 
     def upload_np(self, dataset_id, name, img, meta=None):
+        '''
+        Upload given image in numpy with given name to dataset
+        :param dataset_id: int
+        :param name: str
+        :param img: image in RGB format(numpy matrix)
+        :param meta:
+        :return: list of images
+        '''
         metas = None if meta is None else [meta]
         return self.upload_nps(dataset_id, [name], [img], metas=metas)[0]
 
     def upload_nps(self, dataset_id, names, imgs, progress_cb=None, metas=None):
+        '''
+        Upload given images in numpy with given names to dataset
+        :param dataset_id: int
+        :param names: list of str (if lengh of names list != lengh of imgs list raise error)
+        :param imgs: list of numpy matrix
+        :param progress_cb:
+        :param metas:
+        :return: list of images
+        '''
         def img_to_bytes_stream(item):
             img, name = item[0], item[1]
             img_bytes = sly_image.write_bytes(img, get_file_ext(name))
@@ -192,28 +324,81 @@ class ImageApi(RemoveableBulkModuleApi):
             return sly_image.get_hash(img, get_file_ext(name))
 
         img_name_list = list(zip(imgs, names))
-        hashes = self._upload_data_bulk(img_to_bytes_stream, img_to_hash, img_name_list, progress_cb)
+        hashes = [img_to_hash(x) for x in img_name_list]
+
+        self._upload_data_bulk(img_to_bytes_stream, zip(img_name_list, hashes), progress_cb=progress_cb)
         return self.upload_hashes(dataset_id, names, hashes, metas=metas)
 
     def upload_link(self, dataset_id, name, link, meta=None):
+        '''
+        Upload image from given link with given name to dataset
+        :param dataset_id: int
+        :param name: str
+        :param link: str
+        :param meta:
+        :return: list of images
+        '''
         metas = None if meta is None else [meta]
         return self.upload_links(dataset_id, [name], [link], metas=metas)[0]
 
     def upload_links(self, dataset_id, names, links, progress_cb=None,  metas=None):
+        '''
+        Upload images from given links with given names to dataset
+        :param dataset_id: int
+        :param names: list of str (if lengh of names list != lengh of links list raise error)
+        :param links: list of str
+        :param progress_cb:
+        :param metas:
+        :return: list of images
+        '''
         return self._upload_bulk_add(lambda item: (ApiField.LINK, item), dataset_id, names, links, progress_cb, metas=metas)
 
     def upload_hash(self, dataset_id, name, hash, meta=None):
+        '''
+        Upload image from given hash with given name to dataset
+        :param dataset_id: int
+        :param name: str
+        :param hash: str
+        :param meta:
+        :return: list of images
+        '''
         metas = None if meta is None else [meta]
         return self.upload_hashes(dataset_id, [name], [hash], metas=metas)[0]
 
-    def upload_hashes(self, dataset_id, names, hashes, progress_cb=None,  metas=None):
+    def upload_hashes(self, dataset_id, names, hashes, progress_cb=None, metas=None):
+        '''
+        Upload images from given hashes with given names to dataset
+        :param dataset_id: int
+        :param names: list of str (if lengh of names list != lengh of hashes list raise error)
+        :param hashes: list of str
+        :param progress_cb:
+        :param metas:
+        :return: list of images
+        '''
         return self._upload_bulk_add(lambda item: (ApiField.HASH, item), dataset_id, names, hashes, progress_cb, metas=metas)
 
     def upload_id(self, dataset_id, name, id, meta=None):
+        '''
+        Upload image from given id with given name to dataset
+        :param dataset_id: int
+        :param name: str
+        :param id: int
+        :param meta:
+        :return: list of images
+        '''
         metas = None if meta is None else [meta]
         return self.upload_ids(dataset_id, [name], [id], metas=metas)[0]
 
     def upload_ids(self, dataset_id, names, ids, progress_cb=None, metas=None):
+        '''
+        Upload images from given ids with given names to dataset
+        :param dataset_id: int
+        :param names: list of str (if lengh of names list != lengh of ids list raise error)
+        :param ids: list of integers (all ids have to be from single dataset)
+        :param progress_cb:
+        :param metas:
+        :return: list of images
+        '''
         # all ids have to be from single dataset
         infos = self.get_info_by_id_batch(ids)
         hashes = [info.hash for info in infos]
@@ -253,10 +438,10 @@ class ImageApi(RemoveableBulkModuleApi):
                 #results.append(self.InfoType(*[info_json_copy[field_name] for field_name in self.info_sequence()]))
                 results.append(self._convert_json_info(info_json_copy))
 
-        name_to_res = {img_info.name: img_info for img_info in results}
-        ordered_results = [name_to_res[name] for name in names]
+        #name_to_res = {img_info.name: img_info for img_info in results}
+        #ordered_results = [name_to_res[name] for name in names]
 
-        return ordered_results
+        return results #ordered_results
 
     #@TODO: reimplement
     def _convert_json_info(self, info: dict, skip_missing=True):
@@ -295,6 +480,14 @@ class ImageApi(RemoveableBulkModuleApi):
         return ApiField.IMAGE_IDS
 
     def copy_batch(self, dst_dataset_id, ids, change_name_if_conflict=False, with_annotations=False):
+        '''
+        Copy images with given ids in destination dataset
+        :param dst_dataset_id: int
+        :param ids: list of integers (raise error if type of ids not listand if images ids have to be from the same dataset)
+        :param change_name_if_conflict: bool (if False and images with the same names already exist in destination dataset raise error)
+        :param with_annotations: bool (if True - annotations will be copy to dataset too)
+        :return: list of images
+        '''
         if type(ids) is not list:
             raise RuntimeError("ids parameter has type {!r}. but has to be of type {!r}".format(type(ids), list))
 
@@ -331,17 +524,49 @@ class ImageApi(RemoveableBulkModuleApi):
         return new_images
 
     def move_batch(self, dst_dataset_id, ids, change_name_if_conflict=False, with_annotations=False):
+        '''
+        Move images with given ids in destination dataset
+        :param dst_dataset_id: int
+        :param ids: list of integers (raise error if type of ids not listand if images ids have to be from the same dataset)
+        :param change_name_if_conflict: bool (if False and images with the same names already exist in destination dataset raise error)
+        :param with_annotations: bool (if True - annotations will be copy to dataset too)
+        :return: list of images
+        '''
         new_images = self.copy_batch(dst_dataset_id, ids, change_name_if_conflict, with_annotations)
         self.remove_batch(ids)
         return new_images
 
     def copy(self, dst_dataset_id, id, change_name_if_conflict=False, with_annotations=False):
+        '''
+        Copy image with given id in destination dataset
+        :param dst_dataset_id: int
+        :param id: int
+        :param change_name_if_conflict: bool (if False and images with the same names already exist in destination dataset raise error)
+        :param with_annotations: bool
+        :return: image
+        '''
         return self.copy_batch(dst_dataset_id, [id], change_name_if_conflict, with_annotations)[0]
 
     def move(self, dst_dataset_id, id, change_name_if_conflict=False, with_annotations=False):
+        '''
+        Move image with given id in destination dataset
+        :param dst_dataset_id: int
+        :param id: int
+        :param change_name_if_conflict: bool (if False and images with the same names already exist in destination dataset raise error)
+        :param with_annotations: bool
+        :return: image
+        '''
         return self.move_batch(dst_dataset_id, [id], change_name_if_conflict, with_annotations)[0]
 
     def url(self, team_id, workspace_id, project_id, dataset_id, image_id):
+        '''
+        :param team_id: int
+        :param workspace_id: int
+        :param project_id: int
+        :param dataset_id: int
+        :param image_id: int
+        :return: url of given image id
+        '''
         result = urllib.parse.urljoin(self._api.server_address,
                                       'app/images/{}/{}/{}/{}#image-{}'.format(team_id,
                                                                                workspace_id,
@@ -351,3 +576,16 @@ class ImageApi(RemoveableBulkModuleApi):
                                       )
 
         return result
+
+    @staticmethod
+    def _get_free_name(exist_check_fn, name):
+        res_title = name
+        suffix = 1
+
+        name_without_ext = get_file_name(name)
+        ext = get_file_ext(name)
+
+        while exist_check_fn(res_title):
+            res_title = '{}_{:03d}{}'.format(name_without_ext, suffix, ext)
+            suffix += 1
+        return res_title

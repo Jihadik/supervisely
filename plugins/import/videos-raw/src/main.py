@@ -30,7 +30,9 @@ def add_videos_to_project():
     api.add_header('x-task-id', str(task_id))
 
     workspace_id = task_info["workspaceId"]
-    project_name = task_config['project_name']
+    project_name = task_config.get('project_name')
+    if project_name is None:
+        project_name = task_config["res_names"]["project"]
 
     project_info = None
     if append_to_existing_project is True:
