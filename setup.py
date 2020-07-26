@@ -23,7 +23,7 @@ setup(
         "flask-restful>=0.3.7",
         "grpcio>=1.12.1",
         "jsonschema>=2.6.0,<3.0.0",
-        "matplotlib>=3.0.0",
+        "matplotlib>=2.2.2,<3.0",
         "numpy>=1.14.3",
         "opencv-python>=4.2.0,<5.0",
         "pascal-voc-writer>=0.1.4",
