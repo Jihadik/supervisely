@@ -4,6 +4,10 @@
 > - assessing the performance of vision algorithms for two major tasks of semantic urban scene understanding: pixel-level and instance-level semantic labeling;
 > - supporting research that aims to exploit large volumes of (weakly) annotated data, e.g. for training deep neural networks.
 
+# HOWTO Video
+
+<a href="https://youtu.be/lFs5-zgPulY" target="_blank">![How to import Cityscapes](http://img.youtube.com/vi/lFs5-zgPulY/0.jpg)</a>
+
 
 #### Usage steps:
 

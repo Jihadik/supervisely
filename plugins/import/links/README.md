@@ -27,3 +27,12 @@ Let's consider the following url: `https://m.media-amazon.com/images/M/MV5BMjA0M
 If flag `"normalize_image_name": true` the resulting image name will be normalized: `MV5BMjA0MDIwMDYwNl5BMl5BanBnXkFtZTcwMjY0Mzg4Mw-V1-SY1000-CR0013501000-AL.jpg`.
 
 If flag `"normalize_image_name": false` the resulting image name will be preserved: `MV5BMjA0MDIwMDYwNl5BMl5BanBnXkFtZTcwMjY0Mzg4Mw@@._V1_SY1000_CR0,0,1350,1000_AL_.jpg`.
+
+### Rename image to preserve order
+
+Let's consider the following url: `https://abc.com/images/example.jpg`. 
+
+If flag `"rename_image_to_preserve_order": true` the resulting image name will have the following prefix: `00X_example.jpg`, 
+where X is the index of link in your text file and 00 - leading zeros depending on number of links in the file.
+
+If flag `"preserve_links_order": false` the resulting image name will be preserved: `example.jpg`

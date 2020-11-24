@@ -5,7 +5,6 @@ import time
 from collections import defaultdict, OrderedDict
 import json
 
-
 from supervisely_lib.api.module_api import ApiField, ModuleApiBase, ModuleWithStatus, WaitingTimeExceeded
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 from supervisely_lib.io.fs import get_file_name, ensure_base_path, get_file_hash
@@ -252,3 +251,124 @@ class TaskApi(ModuleApiBase, ModuleWithStatus):
             resp = self._api.post('tasks.files.bulk.upload', encoder)
             if progress_cb is not None:
                 progress_cb(len(content_dict))
+
+    # {
+    #     data: {my_val: 1}
+    #     obj: {val: 1, res: 2}
+    # }
+    # {
+    #     obj: {new_val: 1}
+    # }
+    # // apped: true, recursive: false
+    # {
+    #     data: {my_val: 1}
+    #     obj: {new_val: 1}
+    # }(edited)
+    # // append: false, recursive: false
+    # {
+    #     obj: {new_val: 1}
+    # }(edited)
+    #
+    # 16: 32
+    # // append: true, recursive: true
+    # {
+    #     data: {my_val: 1}
+    #     obj: {val: 1, res: 2, new_val: 1}
+    # }
+
+    def set_fields(self, task_id, fields):
+        for idx, obj in enumerate(fields):
+            for key in [ApiField.FIELD, ApiField.PAYLOAD]:
+                if key not in obj:
+                    raise KeyError("Object #{} does not have field {!r}".format(idx, key))
+        data = {
+            ApiField.TASK_ID: task_id,
+            ApiField.FIELDS: fields
+        }
+        resp = self._api.post('tasks.data.set', data)
+        return resp.json()
+
+    def set_field(self, task_id, field, payload, append=False, recursive=False):
+        fields = [
+            {
+                ApiField.FIELD: field,
+                ApiField.PAYLOAD: payload,
+                ApiField.APPEND: append,
+                ApiField.RECURSIVE: recursive,
+            }
+        ]
+        return self.set_fields(task_id, fields)
+    #
+    # def get_field(self, task_id, field):
+    #     data = {ApiField.TASK_ID: task_id}
+    #     if field is not None and type(field) == str:
+    #         data[ApiField.FIELD] = field
+    #     resp = self._api.post('tasks.data.get', data)
+    #     return resp.json()["result"]
+
+    def _validate_checkpoints_support(self, task_id):
+        info = self.get_info_by_id(task_id)
+        if info["type"] != str(TaskApi.PluginTaskType.TRAIN):
+            raise RuntimeError("Task (id={!r}) has type {!r}. "
+                               "Checkpoints are available only for tasks of type {!r}".format())
+
+    def list_checkpoints(self, task_id):
+        self._validate_checkpoints_support(task_id)
+        resp = self._api.post('tasks.checkpoints.list', {ApiField.ID: task_id})
+        return resp.json()
+
+    def delete_unused_checkpoints(self, task_id):
+        self._validate_checkpoints_support(task_id)
+        resp = self._api.post("tasks.checkpoints.clear", {ApiField.ID: task_id})
+        return resp.json()
+
+    def _set_output(self):
+        pass
+
+    def set_output_project(self, task_id, project_id, project_name=None):
+        if project_name is None:
+            project = self._api.project.get_info_by_id(project_id)
+            project_name = project.name
+
+        output = {
+            ApiField.PROJECT: {
+                ApiField.ID: project_id,
+                ApiField.TITLE: project_name
+            }
+        }
+        resp = self._api.post("tasks.output.set", {ApiField.TASK_ID: task_id, ApiField.OUTPUT: output})
+        return resp.json()
+
+    def set_output_report(self, task_id, file_id, file_name):
+        return self._set_custom_output(task_id, file_id, file_name, description="Report", icon="zmdi zmdi-receipt")
+
+    def _set_custom_output(self, task_id, file_id, file_name, file_url=None, description="File",
+                           icon="zmdi zmdi-file-text", color="#33c94c", background_color="#d9f7e4",
+                           download=False):
+        if file_url is None:
+            file_url = self._api.file.get_url(file_id)
+
+        output = {
+            ApiField.GENERAL: {
+                "icon": {
+                    "className": icon,
+                    "color": color,
+                    "backgroundColor": background_color
+                },
+                "title": file_name,
+                "titleUrl": file_url,
+                "download": download,
+                "description": description
+            }
+        }
+        resp = self._api.post("tasks.output.set", {ApiField.TASK_ID: task_id, ApiField.OUTPUT: output})
+        return resp.json()
+
+    def set_output_archive(self, task_id, file_id, file_name, file_url=None):
+        if file_url is None:
+            file_url = self._api.file.get_info_by_id(file_id).full_storage_url
+        return self._set_custom_output(task_id, file_id, file_name,
+                                       file_url=file_url,
+                                       description="Download archive", icon="zmdi zmdi-archive",
+                                       download=True)
+

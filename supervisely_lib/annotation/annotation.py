@@ -4,6 +4,8 @@
 import json
 import itertools
 import numpy as np
+from typing import List
+import operator
 
 from copy import deepcopy
 
@@ -71,7 +73,7 @@ class Annotation:
         return deepcopy(self._img_size)
 
     @property
-    def labels(self):
+    def labels(self) -> List[Label]:
         return self._labels.copy()
 
     @property
@@ -314,6 +316,13 @@ class Annotation:
         :return: Annotation class object with new labels and image size
         '''
         def _do_transform_labels(src_labels, label_transform_fn):
+            # long easy to debug
+            # result = []
+            # for label in src_labels:
+            #     result.extend(label_transform_fn(label))
+            # return result
+
+            # short, hard-to-debug alternative
             return list(itertools.chain(*[label_transform_fn(label) for label in src_labels]))
         new_labels = _do_transform_labels(self._labels, label_transform_fn)
         new_pixelwise_scores_labels = _do_transform_labels(self._pixelwise_scores_labels, label_transform_fn)
@@ -450,16 +459,6 @@ class Annotation:
 
     @classmethod
     def stat_area(cls, render, names, colors):
-        '''
-        The function stat_area computes class distribution statistics in annotations (in pixels), space free of classes,
-        total area of render, it height, width and number of channels
-        :param render: mask with classes
-        :param names: class names for which statistics will be calculated
-        :param colors: colors of classes on render mask
-        :return: dictionary with statistics of space representation
-        '''
-        #@TODO: check similar colors
-
         if len(names) != len(colors):
             raise RuntimeError("len(names) != len(colors) [{} != {}]".format(len(names), len(colors)))
 
@@ -474,69 +473,106 @@ class Annotation:
         elif len(render.shape) == 3:
             channels = render.shape[2]
 
+        unlabeled_done = False
+
         covered_pixels = 0
         for name, color in zip(names, colors):
-            col_name = name #"{} [area]".format(name)
+            col_name = name
+            if name == "unlabeled":
+                unlabeled_done = True
             class_mask = np.all(render == color, axis=-1).astype('uint8')
             cnt_pixels = class_mask.sum()
             covered_pixels += cnt_pixels
-
-            result[col_name] = cnt_pixels
+            result[col_name] = cnt_pixels / total_pixels * 100.0
 
         if covered_pixels > total_pixels:
             raise RuntimeError("Class colors mistake: covered_pixels > total_pixels")
 
-        result['unlabeled area'] = total_pixels - covered_pixels
-        result['total area'] = total_pixels
+        if unlabeled_done is False:
+            result['unlabeled'] = (total_pixels - covered_pixels) / total_pixels * 100.0
+
         result['height'] = height
         result['width'] = width
         result['channels'] = channels
         return result
 
     def stat_class_count(self, class_names):
-        '''
-        The function stat_class_count counts how many times each class from given list occurs in annotation and total number of classes in annotation
-        :param class_names: list of classes names
-        :return: dictionary with a number of different classes in annotation and it total count
-        '''
-        def _name_to_key(name):
-            return name#"{} [count]".format(name)
         total = 0
-        stat = {_name_to_key(name): 0 for name in class_names}
+        stat = {name: 0 for name in class_names}
         for label in self._labels:
             cur_name = label.obj_class.name
-            if _name_to_key(cur_name) not in stat:
+            if cur_name not in stat:
                 raise KeyError("Class {!r} not found in {}".format(cur_name, class_names))
-            stat[_name_to_key(cur_name)] += 1
+            stat[cur_name] += 1
             total += 1
-        stat['total count'] = total
+        stat['total'] = total
         return stat
 
-    def stat_img_tags(self, tag_names):
-        '''
-        The function stat_img_tags counts how many times each tag from given list occurs in annotation
-        :param tag_names: list of tags names
-        :return: dictionary with a number of different tags in annotation
-        '''
-        stat = {name: 0 for name in tag_names}
-        for tag in self._img_tags:
-            cur_name = tag.meta.name
-            if cur_name not in stat:
-                raise KeyError("Tag {!r} not found in {}".format(cur_name, tag_names))
-            stat[cur_name] += 1
-        return stat
+    # def stat_img_tags(self, tag_names):
+    #     '''
+    #     The function stat_img_tags counts how many times each tag from given list occurs in annotation
+    #     :param tag_names: list of tags names
+    #     :return: dictionary with a number of different tags in annotation
+    #     '''
+    #     stat = {name: 0 for name in tag_names}
+    #     stat['any tag'] = 0
+    #     for tag in self._img_tags:
+    #         cur_name = tag.meta.name
+    #         if cur_name not in stat:
+    #             raise KeyError("Tag {!r} not found in {}".format(cur_name, tag_names))
+    #         stat[cur_name] += 1
+    #         stat['any tag'] += 1
+    #     return stat
 
     def draw_class_idx_rgb(self, render, name_to_index):
-        '''
-        The function draw_class_idx_rgb draws rectangle on render mask corresponding to each label with a specific color corresponding to the class name
-        :param render: mask to draw rectangle, corresponding to each label in annotation
-        :param name_to_index: a dictionary with an index value for each class name
-        '''
         for label in self._labels:
             class_idx = name_to_index[label.obj_class.name]
             color = [class_idx, class_idx, class_idx]
-            label.draw(render, color=color, thickness=1, draw_tags=False, tags_font=self._get_font())
+            label.draw(render, color=color, thickness=1)
 
     @property
     def custom_data(self):
         return self._custom_data.copy()
+
+    def filter_labels_by_min_side(self, thresh, filter_operator=operator.lt, classes=None):
+        def filter(label):
+            if classes == None or label.obj_class.name in classes:
+                bbox = label.geometry.to_bbox()
+                height_px = bbox.height
+                width_px = bbox.width
+                if filter_operator(min(height_px, width_px), thresh):
+                    return []  # action 'delete'
+            return [label]
+        return self.transform_labels(filter)
+
+    # def filter_labels_by_area_percent(self, thresh, operator=operator.lt, classes=None):
+    #     img_area = float(self.img_size[0] * self.img_size[1])
+    #     def filter(label):
+    #         if classes == None or label.obj_class.name in classes:
+    #             cur_percent = label.area * 100.0 / img_area
+    #             if operator(cur_percent, thresh):
+    #                 return []  # action 'delete'
+    #         return [label]
+    #     return self.transform_labels(filter)
+
+    # def objects_filter_size(self, filter_operator, width=None, height=None, filtering_classes=None):
+    #     if width == None and height == None:
+    #         raise ValueError('width and height can not be none at the same time')
+    #
+    #     def filter_delete_size(fig):
+    #         if filtering_classes == None or fig.obj_class.name in filtering_classes:
+    #             fig_rect = fig.geometry.to_bbox()
+    #
+    #             if width == None:
+    #                 if filter_operator(fig_rect.height, height):
+    #                     return []
+    #             elif height == None:
+    #                 if filter_operator(fig_rect.width, width):
+    #                     return []
+    #             else:
+    #                 if filter_operator(fig_rect.width, width) or filter_operator(fig_rect.height, height):
+    #                     return []
+    #
+    #         return [fig]
+    #
+    #     return self.transform_labels(filter_delete_size)

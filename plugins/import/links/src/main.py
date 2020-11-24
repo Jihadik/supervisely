@@ -18,7 +18,11 @@ def create_project(api, workspace_id, project_name, append_to_existing_project):
     return dst_project
 
 
-def process_dataset_links(api, project_info, file_path, normalize_url=True):
+def calc_leading_zeros(number_of_links):
+    return len(str(number_of_links))
+
+
+def process_dataset_links(api, project_info, file_path, normalize_url=True, rename_image_to_preserve_order=False):
     dataset_name = os.path.relpath(os.path.splitext(file_path)[0], TaskPaths.DATA_DIR).replace(os.sep, '__')
     links_counter = 0
 
@@ -26,9 +30,10 @@ def process_dataset_links(api, project_info, file_path, normalize_url=True):
         urls = [line.strip() for line in in_file]
 
     if len(urls) > 0:
+        prefix_width = calc_leading_zeros(len(urls))
         dst_dataset = api.dataset.create(project_info.id, dataset_name, change_name_if_conflict=True)
         progress = sly.Progress('Importing dataset: {}'.format(dataset_name), len(urls))
-        for url in urls:
+        for idx, url in enumerate(urls):
             if url:
                 try:
                     basename = os.path.basename(url)
@@ -40,6 +45,10 @@ def process_dataset_links(api, project_info, file_path, normalize_url=True):
                         image_name = slugify(file_name, lowercase=False, save_order=True) + file_ext
                     else:
                         image_name = file_name + file_ext
+
+                    if rename_image_to_preserve_order:
+                        image_name = str(idx).zfill(prefix_width) + '_' + image_name
+
                     image_name = api.image.get_free_name(dst_dataset.id, image_name)
                     api.image.upload_link(dst_dataset.id, image_name, url)
                     links_counter += 1
@@ -62,6 +71,7 @@ def main():
     normalize_url = True
     if convert_options is not None:
         normalize_url = convert_options.get('normalize_image_name', True)
+        rename_image_to_preserve_order = convert_options.get('rename_image_to_preserve_order', False)
 
     server_address = task_config['server_address']
     token = task_config['api_token']
@@ -76,7 +86,7 @@ def main():
     total_counter = 0
     for file_path in sly.fs.list_files_recursively(
             TaskPaths.DATA_DIR, filter_fn=lambda path: sly.fs.get_file_ext(path).lower() == '.txt'):
-        total_counter += process_dataset_links(api, project_info, file_path, normalize_url=normalize_url)
+        total_counter += process_dataset_links(api, project_info, file_path, normalize_url=normalize_url, rename_image_to_preserve_order=rename_image_to_preserve_order)
 
     if total_counter == 0:
         raise RuntimeError('Result project is empty! No valid links find in files.')

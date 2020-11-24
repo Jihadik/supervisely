@@ -36,7 +36,7 @@ def add_pointclouds_to_project():
 
     project_info = None
     if append_to_existing_project is True:
-        project_info = api.project.get_info_by_name(workspace_id, project_name, expected_type=sly.ProjectType.VIDEOS, raise_error=True)
+        project_info = api.project.get_info_by_name(workspace_id, project_name, expected_type=sly.ProjectType.POINT_CLOUDS, raise_error=True)
 
     files_list = api.task.get_import_files_list(task_id)
 

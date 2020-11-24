@@ -5,13 +5,7 @@ FROM ${REGISTRY}/base-py:${TAG}
 ##############################################################################
 # pytorch
 ##############################################################################
-RUN conda install -y -c soumith \
-        magma-cuda90=2.3.0 \
-    && conda install -y -c pytorch \
-        pytorch=0.3.1 \
-        torchvision=0.2.0 \
-        cuda90=1.0 \
-    && conda clean --all --yes
+RUN conda install pytorch==1.5.1 torchvision==0.6.1 cudatoolkit=9.2 -c pytorch
 
 RUN pip install "pillow<7"
 

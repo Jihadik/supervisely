@@ -85,3 +85,26 @@ class NpEncoder(json.JSONEncoder):
 
 COMMUNITY = "community"
 ENTERPRISE = "enterprise"
+
+
+def validate_percent(value):
+    if 0 <= value <= 100:
+        pass
+    else:
+        raise ValueError('Percent has to be in range [0; 100]')
+
+
+def sizeof_fmt(num, suffix='B'):
+    for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+        if abs(num) < 1024.0:
+            return "%3.1f %s%s" % (num, unit, suffix)
+        num /= 1024.0
+    return "%.1f %s%s" % (num, 'Yi', suffix)
+
+def _remove_sensitive_information(d: dict):
+    new_dict = dict(d)
+    fields = ["api_token", "API_TOKEN"]
+    for field in fields:
+        if field in new_dict:
+            new_dict[field] = "***"
+    return new_dict

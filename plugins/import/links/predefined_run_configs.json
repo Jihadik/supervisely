@@ -3,7 +3,9 @@
         "title": "settings",
         "type": "import",
         "config": {
+        	"rename_image_to_preserve_order": false,
             "normalize_image_name": true,
+            "rename_image_to_preserve_order (help)": "if true, prefix “00X_” will be added to the beginning of image name, where X is the index of link in your text file and 00 - leading zeros depending on number of links in the file",
             "normalize_image_name (help)": "if true, string slugification will be perform. A \"slug\" is a way of generating a valid URL. Learn more here: https://stackoverflow.com/questions/5574042/string-slugification-in-python"
     }
   }

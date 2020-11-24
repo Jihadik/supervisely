@@ -32,6 +32,8 @@ class LabelingJobApi(RemoveableModuleApi, ModuleWithStatus):
                 ApiField.CREATED_BY_LOGIN,
                 ApiField.ASSIGNED_TO_ID,
                 ApiField.ASSIGNED_TO_LOGIN,
+                ApiField.REVIEWER_ID,
+                ApiField.REVIEWER_LOGIN,
 
                 ApiField.CREATED_AT,
                 ApiField.STARTED_AT,
@@ -53,6 +55,8 @@ class LabelingJobApi(RemoveableModuleApi, ModuleWithStatus):
                 ApiField.FILTER_IMAGES_BY_TAGS,
                 ApiField.INCLUDE_IMAGES_WITH_TAGS,
                 ApiField.EXCLUDE_IMAGES_WITH_TAGS,
+
+                ApiField.ENTITIES,
                 ]
 
     @staticmethod
@@ -62,8 +66,7 @@ class LabelingJobApi(RemoveableModuleApi, ModuleWithStatus):
     def __init__(self, api):
         ModuleApi.__init__(self, api)
 
-    # @TODO: reimplement
-    def _convert_json_info(self, info: dict, skip_missing=False):
+    def _convert_json_info(self, info: dict, skip_missing=True):
         if info is None:
             return None
         else:
@@ -73,11 +76,17 @@ class LabelingJobApi(RemoveableModuleApi, ModuleWithStatus):
                     continue
                 value = None
                 if type(field_name) is str:
-                    value = info[field_name]
+                    if skip_missing is True:
+                        value = info.get(field_name, None)
+                    else:
+                        value = info[field_name]
                 elif type(field_name) is tuple:
                     for sub_name in field_name[0]:
                         if value is None:
-                            value = info[sub_name]
+                            if skip_missing is True:
+                                value = info.get(sub_name, None)
+                            else:
+                                value = info[sub_name]
                         else:
                             value = value[sub_name]
                 else:
@@ -123,7 +132,8 @@ class LabelingJobApi(RemoveableModuleApi, ModuleWithStatus):
                tags_limit_per_image=None,
                include_images_with_tags=None,
                exclude_images_with_tags=None,
-               images_range=None):
+               images_range=None,
+               reviewer_id=None):
         '''
         Create labeling job by given user in given dataset
         :param name: str
@@ -163,8 +173,7 @@ class LabelingJobApi(RemoveableModuleApi, ModuleWithStatus):
         data = {ApiField.NAME: name,
                 ApiField.DATASET_ID: dataset_id,
                 ApiField.USER_IDS: user_ids,
-                ApiField.DESCRIPTION: description,
-                ApiField.README: readme,
+                #ApiField.DESCRIPTION: description,
                 ApiField.META: {
                      'classes': classes_to_label,
                      'projectTags': tags_to_label,
@@ -173,11 +182,20 @@ class LabelingJobApi(RemoveableModuleApi, ModuleWithStatus):
                      'imageTagsLimit': tags_limit_per_image,}
                 }
 
+        if readme is not None:
+            data[ApiField.README] = str(readme)
+
+        if description is not None:
+            data[ApiField.DESCRIPTION] = str(description)
+
         if images_range is not None:
             if len(images_range) != 2:
                 raise RuntimeError('images_range has to contain 2 elements (start, end)')
             images_range = {'start': images_range[0], 'end': images_range[1]}
             data[ApiField.META]['range'] = images_range
+
+        if reviewer_id is not None:
+            data[ApiField.REVIEWER_ID] = reviewer_id
 
         response = self._api.post('jobs.add', data)
         # created_jobs_json = response.json()
@@ -187,7 +205,8 @@ class LabelingJobApi(RemoveableModuleApi, ModuleWithStatus):
             created_jobs.append(self.get_info_by_id(job[ApiField.ID]))
         return created_jobs
 
-    def get_list(self, team_id, created_by_id=None, assigned_to_id=None, project_id=None, dataset_id=None):
+    def get_list(self, team_id, created_by_id=None, assigned_to_id=None, project_id=None, dataset_id=None,
+                 show_disabled=False):
         '''
         Get all labeling that were created by given user and were assigned to given assigned user in given team
         :param team_id: int
@@ -206,7 +225,9 @@ class LabelingJobApi(RemoveableModuleApi, ModuleWithStatus):
             filters.append({"field": ApiField.PROJECT_ID, "operator": "=", "value": project_id})
         if dataset_id is not None:
             filters.append({"field": ApiField.DATASET_ID, "operator": "=", "value": dataset_id})
-        return self.get_list_all_pages('jobs.list', {ApiField.TEAM_ID: team_id, ApiField.FILTER: filters})
+        return self.get_list_all_pages('jobs.list', {ApiField.TEAM_ID: team_id,
+                                                     "showDisabled": show_disabled,
+                                                     ApiField.FILTER: filters})
 
     def stop(self, id):
         '''

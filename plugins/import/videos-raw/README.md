@@ -15,6 +15,14 @@ Enterprise Edition (EE) DON'T have limitations:
 - it has built-in tools to connect existing video storages: add your private local storage or the cloud one (Google Cloud, Amazon AWS, Microsoft Azure)   
 
 
+## HOWTO Import videos to a new project
+
+<a href="https://youtu.be/Pkg8gjXVces" target="_blank">![How to import videos to a new project](http://img.youtube.com/vi/Pkg8gjXVces/0.jpg)</a>
+
+## HOWTO Import videos to the existing project
+
+<a href="https://youtu.be/5F7Ox0fXOGI" target="_blank">![How to import videos to the existing project](http://img.youtube.com/vi/5F7Ox0fXOGI/0.jpg)</a>
+
 ## Datasets structure
 
 Plugin creates datasets with names of top-most directories in a hierarchy. Files from root import directory will be placed to dataset with name "ds0".  

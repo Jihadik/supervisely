@@ -16,6 +16,7 @@
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg">
 </p>
 
+
 <p align="center">
   <a href="#introduction">Introduction</a> •
   <a href="#agent">Agent</a> •
@@ -29,7 +30,6 @@
 ![screenshot](https://i.imgur.com/5dzQrrA.gif)
 
 ## Introduction
-
 
 Supervisely is a web platform where you can find everything you need to build Deep Learning solutions within a single environment.
 
@@ -95,8 +95,7 @@ your custom format.
 
 We have organized most of the common functionality for processing data in
 [Supervisely format](https://docs.supervise.ly/ann_format/) and for training and
-inference with neural networks into
-the [Python SDK](./supervisely_lib). Our stock plugins rely on the SDK
+inference with neural networks into the [Python SDK](./supervisely_lib). Our stock plugins rely on the SDK
 extensively, and we believe the SDK will be also valuable to the community.
 
 The  SDK not only wraps all the low-level details of handling the data and
@@ -116,6 +115,11 @@ Key features:
 #### Installation:
 
 ```
+pip install supervisely
+```
+
+or
+```
 git clone https://github.com/supervisely/supervisely.git && \
 pip install -e ./supervisely
 ```
@@ -132,7 +136,6 @@ Tip: `opencv-python` may require `apt-get install libgtk2.0-dev` Or use pre-buil
 ```docker pull supervisely/base-py```
 
 The corresponding `Dockerfile` can be found in `base_images` directory. 
-
 
 
 

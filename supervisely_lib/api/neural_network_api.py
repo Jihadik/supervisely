@@ -6,14 +6,14 @@ from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 import numpy as np
 import json
 
-from supervisely_lib.api.module_api import ApiField, CloneableModuleApi
+from supervisely_lib.api.module_api import ApiField, CloneableModuleApi, RemoveableModuleApi
 from supervisely_lib._utils import rand_str
 from supervisely_lib.io.fs import ensure_base_path, silent_remove
 from supervisely_lib.imaging import image as sly_image
 from supervisely_lib.project.project_meta import ProjectMeta
 
 
-class NeuralNetworkApi(CloneableModuleApi):
+class NeuralNetworkApi(CloneableModuleApi, RemoveableModuleApi):
     @staticmethod
     def info_sequence():
         return [ApiField.ID,
@@ -139,3 +139,28 @@ class NeuralNetworkApi(CloneableModuleApi):
 
     def _clone_api_method_name(self):
         return 'models.clone'
+
+    def _remove_api_method_name(self):
+        return 'models.remove'
+
+    def create_from_checkpoint(self, task_id, checkpoint_id, model_name, change_name_if_conflict=True):
+        # FYI: checkpoint has these fields
+        # 'modelTitle': 'my_model_name_006',
+        # 'status': 'uploaded'
+
+        self._api.task._validate_checkpoints_support(task_id)
+        task_info = self._api.task.get_info_by_id(task_id)
+        workspace_id = task_info[ApiField.WORKSPACE_ID]
+        new_model_name = self.get_free_name(workspace_id, model_name)
+        if new_model_name != model_name and change_name_if_conflict is False:
+            raise KeyError("Model name={!r} already exists in workspace id={!r}".format(model_name, workspace_id))
+        resp = self._api.post("models.create-from-checkpoint", {ApiField.ID: checkpoint_id,
+                                                                ApiField.TASK_ID: task_id,
+                                                                ApiField.NAME: new_model_name})
+        process_task_id = resp.json()[ApiField.TASK_ID]
+        if process_task_id is not None:
+            self._api.task.wait(process_task_id, self._api.task.Status.FINISHED)
+        else:
+            # upload process skipped because checkpoint is already uploaded to server, just new model will be created
+            pass
+        return new_model_name
