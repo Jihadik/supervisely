@@ -39,7 +39,7 @@ setup(
         "python-json-logger==0.1.11",
         "requests>=2.24.0",
         "requests-toolbelt>=0.9.1",
-        "scikit-image>=0.17.1",
+        "scikit-image>=0.16.0",
         "scipy>=1.5.2",
         "Shapely>=1.7.1",
         #"simplejson>=3.17.2",
